@@ -112,7 +112,7 @@ private:
             {
                 if (!ec && bytes_recvd > 0)
                 {
-                    BOOST_LOG_TRIVIAL(debug) << "udp received: '" << recv_buffer_ << '\'';
+                    BOOST_LOG_TRIVIAL(debug) << "udp received: '" << std::string(recv_buffer_.begin(), recv_buffer_.end()) << '\'';
                     DoSend(bytes_recvd);
                 }
                 else
@@ -123,9 +123,9 @@ private:
     void DoSend(std::size_t /*length*/)
     {
         BOOST_LOG_TRIVIAL(debug) << "udp.DoSend";
-        std::string message = MakeDaytime();
+        std::shared_ptr<std::string> message(new std::string(MakeDaytime()));
 
-        socket_.async_send_to(boost::asio::buffer(message, message.size()), remote_endpoint_,
+        socket_.async_send_to(boost::asio::buffer(*message), remote_endpoint_,
             [this](boost::system::error_code /*ec*/, std::size_t /*bytes_sent*/)
             {
                 DoReceive();
@@ -134,7 +134,7 @@ private:
 
     udp::socket socket_;
     udp::endpoint remote_endpoint_;
-    std::string recv_buffer_;
+    std::array<char, 256> recv_buffer_;
 };
 
 int main()
