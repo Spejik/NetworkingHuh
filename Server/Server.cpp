@@ -1,5 +1,3 @@
-#define _WINSOCK_DEPRECATED_NO_WARNINGS
-#define _WIN32_WINNT _WIN32_WINNT_WIN10
 #include <boost/date_time/posix_time/posix_time.hpp>
 #include <boost/log/trivial.hpp>
 #include <boost/asio.hpp>
