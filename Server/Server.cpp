@@ -24,16 +24,9 @@ class Connection_tcp
     : public std::enable_shared_from_this<Connection_tcp>
 {
 public:
-    typedef std::shared_ptr<Connection_tcp> pointer;
-
-    static pointer Create(boost::asio::io_context& io_context)
+    Connection_tcp(tcp::socket socket)
+        : socket_(std::move(socket))
     {
-        return pointer(new Connection_tcp(io_context));
-    }
-
-    tcp::socket& Socket()
-    {
-        return socket_;
     }
 
     void Start()
@@ -42,11 +35,6 @@ public:
     }
 
 private:
-    Connection_tcp(boost::asio::io_context& io_context)
-        : socket_(io_context)
-    {
-    }
-
     void DoRead()
     {
         BOOST_LOG_TRIVIAL(debug) << "tcp_conn.DoRead";
@@ -73,6 +61,7 @@ private:
 
     }
 
+private:
     tcp::socket socket_;
     std::string dataout_;
     std::string datain_;
@@ -81,81 +70,71 @@ private:
 class Server_tcp
 {
 public:
-    Server_tcp(boost::asio::io_context& io_context)
-        : io_context_(io_context),
-        acceptor_(io_context, tcp::endpoint(tcp::v4(), 13))
+    Server_tcp(boost::asio::io_context& io_context, short port)
+        : acceptor_(io_context, tcp::endpoint(tcp::v4(), port))
     {
-        StartAccept();
+        DoAccept();
     }
 
 private:
-    void StartAccept()
+    void DoAccept()
     {
-        BOOST_LOG_TRIVIAL(debug) << "tcp.StartAccept";
+        BOOST_LOG_TRIVIAL(debug) << "tcp.DoAccept";
 
-        Connection_tcp::pointer new_connection = Connection_tcp::Create(io_context_);
-        acceptor_.async_accept(new_connection->Socket(), 
-            std::bind(&Server_tcp::HandleAccept, this, 
-                new_connection, boost::asio::placeholders::error));
+        acceptor_.async_accept(
+            [this](boost::system::error_code ec, tcp::socket socket)
+            {
+                if (!ec) 
+                    std::make_shared<Connection_tcp>(std::move(socket))->Start();
+
+                DoAccept();
+            });
     }
 
-    void HandleAccept(Connection_tcp::pointer new_connection, const boost::system::error_code& error)
-    {
-        if (error) BOOST_LOG_TRIVIAL(error) << "tcp.HandleAccept: " << error.message();
-
-        new_connection->Start(); 
-        StartAccept(); 
-    }
-
-    boost::asio::io_context& io_context_;
     tcp::acceptor acceptor_;
 };
 
 class Server_udp
 {
 public:
-    Server_udp(boost::asio::io_context& io_context)
-        : socket_(io_context, udp::endpoint(udp::v4(), 13))
+    Server_udp(boost::asio::io_context& io_context, short port)
+        : socket_(io_context, udp::endpoint(udp::v4(), port))
     {
-        StartReceive();
+        DoReceive();
     }
 
 private:
-    void StartReceive()
+    void DoReceive()
     {
-        BOOST_LOG_TRIVIAL(debug) << "udp.StartReceive";
+        BOOST_LOG_TRIVIAL(debug) << "udp.DoReceive";
 
         socket_.async_receive_from(
-            boost::asio::buffer(recv_buffer_), remote_endpoint_,
-            std::bind(&Server_udp::HandleReceive, this,
-                boost::asio::placeholders::error));
+            boost::asio::buffer(recv_buffer_, 256), remote_endpoint_,
+            [this](boost::system::error_code ec, std::size_t bytes_recvd)
+            {
+                if (!ec && bytes_recvd > 0)
+                    DoSend(bytes_recvd);
+                else
+                    DoReceive();
+            });
     }
 
-    void HandleReceive(const boost::system::error_code& error)
+    void DoSend(std::size_t length)
     {
-        BOOST_LOG_TRIVIAL(debug) << "udp.HandleReceive";
+        BOOST_LOG_TRIVIAL(debug) << "udp.DoSend";
 
-        if (!error)
-        {
-            boost::shared_ptr<std::string> message(
-                new std::string(MakeDaytime()));
-
-            socket_.async_send_to(boost::asio::buffer(*message), remote_endpoint_,
-                std::bind(&Server_udp::HandleSend, this, message));
-
-            StartReceive();
-        }
-    }
-
-    void HandleSend(boost::shared_ptr<std::string> /*message*/)
-    {
-        BOOST_LOG_TRIVIAL(debug) << "udp.HandleSend";
-
+        std::string message = MakeDaytime();
+        socket_.async_send_to(
+            boost::asio::buffer(message, length), remote_endpoint_,
+            [this](boost::system::error_code /*ec*/, std::size_t /*bytes_sent*/)
+            {
+                DoReceive();
+            });
     }
 
     udp::socket socket_;
     udp::endpoint remote_endpoint_;
-    std::array<char, 1> recv_buffer_;
+    std::array<char, 256> recv_buffer_;
 };
 
 int main()
@@ -163,8 +142,9 @@ int main()
     try
     {
         boost::asio::io_context io_context;
-        Server_tcp server1{ io_context };
-        Server_udp server2{ io_context };
+        short port = 13;
+        Server_tcp server1{ io_context, port };
+        Server_udp server2{ io_context, port };
         io_context.run();
     }
     catch (std::exception& e)
