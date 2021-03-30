@@ -1,3 +1,5 @@
+#define _WINSOCK_DEPRECATED_NO_WARNINGS
+#define _WIN32_WINNT _WIN32_WINNT_WIN10
 #include <boost/date_time/posix_time/posix_time.hpp>
 #include <boost/log/trivial.hpp>
 #include <boost/asio.hpp>
@@ -39,21 +41,21 @@ private:
     {
         BOOST_LOG_TRIVIAL(debug) << "tcp_conn.DoRead";
         auto self(shared_from_this());
-        dataout_ = MakeDaytime();
 
-        socket_.async_read_some(boost::asio::buffer(datain_, 1024),
+        socket_.async_read_some(boost::asio::buffer(datain_, 256),
             [this, self](boost::system::error_code ec, std::size_t length)
             {
                 if (!ec) DoWrite(length);
             });
     }
 
-    void DoWrite(std::size_t length)
+    void DoWrite(std::size_t /*length*/)
     {
         BOOST_LOG_TRIVIAL(debug) << "tcp_conn.DoWrite";
         auto self(shared_from_this());
+        std::string message = MakeDaytime();
 
-        boost::asio::async_write(socket_, boost::asio::buffer(datain_),
+        boost::asio::async_write(socket_, boost::asio::buffer(message),
             [this, self](boost::system::error_code ec, std::size_t /*length*/)
             {
                 if (ec) DoRead();
@@ -63,7 +65,6 @@ private:
 
 private:
     tcp::socket socket_;
-    std::string dataout_;
     std::string datain_;
 };
 
@@ -108,24 +109,25 @@ private:
     {
         BOOST_LOG_TRIVIAL(debug) << "udp.DoReceive";
 
-        socket_.async_receive_from(
-            boost::asio::buffer(recv_buffer_, 256), remote_endpoint_,
+        socket_.async_receive_from(boost::asio::buffer(recv_buffer_, 256), remote_endpoint_,
             [this](boost::system::error_code ec, std::size_t bytes_recvd)
             {
                 if (!ec && bytes_recvd > 0)
+                {
+                    BOOST_LOG_TRIVIAL(debug) << "udp received: '" << recv_buffer_ << '\'';
                     DoSend(bytes_recvd);
+                }
                 else
                     DoReceive();
             });
     }
 
-    void DoSend(std::size_t length)
+    void DoSend(std::size_t /*length*/)
     {
         BOOST_LOG_TRIVIAL(debug) << "udp.DoSend";
-
         std::string message = MakeDaytime();
-        socket_.async_send_to(
-            boost::asio::buffer(message, length), remote_endpoint_,
+
+        socket_.async_send_to(boost::asio::buffer(message, message.size()), remote_endpoint_,
             [this](boost::system::error_code /*ec*/, std::size_t /*bytes_sent*/)
             {
                 DoReceive();
@@ -134,7 +136,7 @@ private:
 
     udp::socket socket_;
     udp::endpoint remote_endpoint_;
-    std::array<char, 256> recv_buffer_;
+    std::string recv_buffer_;
 };
 
 int main()

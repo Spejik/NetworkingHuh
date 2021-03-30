@@ -66,7 +66,7 @@ private:
 			udp::socket socket(io_ctx);
 			socket.open(udp::v4());
 
-			std::array<char, 1> send_buf = { { 0 } };
+			std::string send_buf = "hello???";
 			socket.send_to(boost::asio::buffer(send_buf), endpoint_udp);
 
 			std::array<char, 128> recv_buf;
