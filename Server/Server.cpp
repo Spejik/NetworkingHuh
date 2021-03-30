@@ -51,12 +51,13 @@ private:
     {
         BOOST_LOG_TRIVIAL(debug) << "tcp_conn.DoWrite";
         auto self(shared_from_this());
-        std::string message = MakeDaytime();
+        //std::string message = MakeDaytime();
+        std::shared_ptr<std::string> message(new std::string(MakeDaytime()));
 
-        boost::asio::async_write(socket_, boost::asio::buffer(message),
+        boost::asio::async_write(socket_, boost::asio::buffer(*message),
             [this, self](boost::system::error_code ec, std::size_t /*length*/)
             {
-                if (ec) DoRead();
+                if (ec) DoRead(); // (assertion in xstring) error maybe here?
             });
 
     }
