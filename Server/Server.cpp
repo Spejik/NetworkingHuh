@@ -19,7 +19,6 @@ std::string MakeDaytime()
     ptime t = microsec_clock::universal_time();
     return to_iso_string(t);
 }
-
 class Connection_tcp
     : public std::enable_shared_from_this<Connection_tcp>
 {
@@ -43,6 +42,7 @@ private:
         socket_.async_read_some(boost::asio::buffer(datain_, 256),
             [this, self](boost::system::error_code ec, std::size_t length)
             {
+                BOOST_LOG_TRIVIAL(info) << "tcp recieved: '" << datain_ << '\'';
                 if (!ec) DoWrite(length);
             });
     }
@@ -51,13 +51,12 @@ private:
     {
         BOOST_LOG_TRIVIAL(debug) << "tcp_conn.DoWrite";
         auto self(shared_from_this());
-        //std::string message = MakeDaytime();
-        std::shared_ptr<std::string> message(new std::string(MakeDaytime()));
+        std::string message = MakeDaytime();
 
-        boost::asio::async_write(socket_, boost::asio::buffer(*message),
-            [this, self](boost::system::error_code ec, std::size_t /*length*/)
+        boost::asio::async_write(socket_, boost::asio::buffer(message.data(), message.size()),
+            [this, self, message](boost::system::error_code ec, std::size_t length)
             {
-                if (ec) DoRead(); // (assertion in xstring) error maybe here?
+                if (!ec) DoRead();
             });
 
     }
@@ -66,7 +65,6 @@ private:
     tcp::socket socket_;
     std::string datain_;
 };
-
 class Server_tcp
 {
 public:
@@ -93,7 +91,6 @@ private:
 
     tcp::acceptor acceptor_;
 };
-
 class Server_udp
 {
 public:
@@ -124,9 +121,9 @@ private:
     void DoSend(std::size_t /*length*/)
     {
         BOOST_LOG_TRIVIAL(debug) << "udp.DoSend";
-        std::shared_ptr<std::string> message(new std::string(MakeDaytime()));
+        std::string message = MakeDaytime();
 
-        socket_.async_send_to(boost::asio::buffer(*message), remote_endpoint_,
+        socket_.async_send_to(boost::asio::buffer(message.data(), message.size()), remote_endpoint_,
             [this](boost::system::error_code /*ec*/, std::size_t /*bytes_sent*/)
             {
                 DoReceive();
